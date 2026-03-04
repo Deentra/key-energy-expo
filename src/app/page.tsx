@@ -287,7 +287,7 @@ export default function ExhibitorsDashboard() {
               ✗ Sync failed
             </motion.div>
           )}
-          <Button
+          {/* <Button
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending || hasSynced}
             className="gap-2 bg-blue-600 hover:bg-blue-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
@@ -300,7 +300,7 @@ export default function ExhibitorsDashboard() {
               <RefreshCw className="h-4 w-4" />
             )}
             {syncMutation.isPending ? 'Syncing...' : hasSynced ? 'Synced!' : 'Sync All Exhibitors'}
-          </Button>
+          </Button> */}
           <div className="flex flex-col gap-1 w-full sm:w-auto">
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <Button
