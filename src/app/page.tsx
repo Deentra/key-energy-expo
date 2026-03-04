@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useEffect } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -30,8 +30,9 @@ import {
   Loader,
   CheckCircle2,
   ExternalLink,
+  Sparkles,
 } from 'lucide-react';
-import { useFetchExhibitors, useFetchStats, useSyncExhibitors, useUpdatePVStatus, useUpdateExhibitorStatus, Exhibitor } from '@/lib/hooks/useExhibitors';
+import { useFetchExhibitors, useFetchStats, useSyncExhibitors, useUpdatePVStatus, useUpdateExhibitorStatus, useRecognizePVInstallers, Exhibitor } from '@/lib/hooks/useExhibitors';
 import { useExhibitorStore } from '@/lib/stores/exhibitorStore';
 import { updateNotesSchema, UpdateNotesForm } from '@/lib/schemas/exhibitor';
 import { ExhibitorTable } from '@/components/ExhibitorTable';
@@ -41,6 +42,7 @@ const ITEMS_PER_PAGE = 10;
 export default function ExhibitorsDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const [activeTab, setActiveTab] = useState<'all' | 'pv'>('all');
 
   // Zustand store
   const {
@@ -59,26 +61,28 @@ export default function ExhibitorsDashboard() {
     clearFilters,
   } = useExhibitorStore();
 
-  // Track if initial load is done
-  const isInitialMount = useEffect(() => {
+  // Sync URL on initial mount
+  useEffect(() => {
     // Parse URL parameters and restore state
-    const tab = searchParams.get('tab') || 'all';
+    const tab = searchParams.get('tab') === 'pv' ? 'pv' : 'all';
     const q = searchParams.get('q') || '';
     const status = searchParams.get('status') || 'All';
     const stand = searchParams.get('stand') || '';
     const page = parseInt(searchParams.get('page') || '1');
     const pvOnly = searchParams.get('pvOnly') === 'true';
 
-    if (q !== searchQuery) setSearchQuery(q);
-    if (status !== filterStatus) setFilterStatus(status);
-    if (stand !== filterStand) setFilterStand(stand);
+    setActiveTab(tab);
+    if (q && q !== searchQuery) setSearchQuery(q);
+    if (status !== 'All' && status !== filterStatus) setFilterStatus(status);
+    if (stand && stand !== filterStand) setFilterStand(stand);
     if (pvOnly !== filterPVOnly) setFilterPVOnly(pvOnly);
-    if (page !== currentPage) setCurrentPage(page);
+    if (page > 1 && page !== currentPage) setCurrentPage(page);
   }, []); // Run only on mount
 
   // Update URL when state changes
   useEffect(() => {
     const params = new URLSearchParams();
+    if (activeTab !== 'all') params.set('tab', activeTab);
     
     if (searchQuery) params.set('q', searchQuery);
     if (filterStatus !== 'All') params.set('status', filterStatus);
@@ -86,10 +90,13 @@ export default function ExhibitorsDashboard() {
     if (filterPVOnly) params.set('pvOnly', 'true');
     if (currentPage > 1) params.set('page', currentPage.toString());
 
-    const queryString = params.toString();
-    const url = queryString ? `?${queryString}` : '/';
-    router.push(url, { scroll: false });
-  }, [searchQuery, filterStatus, filterStand, filterPVOnly, currentPage, router]);
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery !== currentQuery) {
+      const url = nextQuery ? `?${nextQuery}` : '/';
+      router.replace(url, { scroll: false });
+    }
+  }, [activeTab, searchQuery, filterStatus, filterStand, filterPVOnly, currentPage, router, searchParams]);
 
   // React Query hooks
   const { data: exhibitors = [] as Exhibitor[], isLoading } = useFetchExhibitors(
@@ -103,16 +110,12 @@ export default function ExhibitorsDashboard() {
   const syncMutation = useSyncExhibitors();
   const pvStatusMutation = useUpdatePVStatus();
   const updateStatusMutation = useUpdateExhibitorStatus();
+  const recognizePVMutation = useRecognizePVInstallers();
 
   // Handle clear filters - also updates URL
   const handleClearFilters = () => {
     clearFilters();
-    const tab = searchParams.get('tab') || 'all';
-    const params = new URLSearchParams();
-    if (tab !== 'all') params.set('tab', tab);
-    const queryString = params.toString();
-    const url = queryString ? `?${queryString}` : '/';
-    router.push(url, { scroll: false });
+    setCurrentPage(1);
   };
 
   // React Hook Form for notes editing
@@ -151,6 +154,17 @@ export default function ExhibitorsDashboard() {
         console.error('Error saving notes:', error);
       }
     }
+  };
+
+  const handleStatusChange = (exhibitorId: string, newStatus: 'New' | 'Contacted' | 'Successful Lead' | 'Rejected') => {
+    const exhibitor = exhibitors.find(e => e.id === exhibitorId);
+    if (!exhibitor) return;
+
+    updateStatusMutation.mutate({
+      id: exhibitorId,
+      status: newStatus,
+      notes: exhibitor.notes,
+    });
   };
 
   // Filter exhibitors for PV only view
@@ -254,6 +268,19 @@ export default function ExhibitorsDashboard() {
             )}
             {syncMutation.isPending ? 'Syncing...' : syncMutation.isSuccess ? 'Synced!' : 'Sync All Exhibitors'}
           </Button>
+          <Button
+            onClick={() => recognizePVMutation.mutate()}
+            disabled={recognizePVMutation.isPending}
+            className="gap-2 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            title="Analyze company names to identify potential PV installers using keyword matching"
+          >
+            {recognizePVMutation.isPending ? (
+              <Loader className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+            {recognizePVMutation.isPending ? 'Analyzing...' : recognizePVMutation.data?.recognized ? `Found ${recognizePVMutation.data?.recognized}` : 'Recognize PV Installers'}
+          </Button>
         </div>
       </motion.div>
 
@@ -292,20 +319,10 @@ export default function ExhibitorsDashboard() {
 
       <Tabs 
         defaultValue="all" 
-        value={searchParams.get('tab') || 'all'}
+        value={activeTab}
         onValueChange={(value) => {
-          const params = new URLSearchParams();
-          params.set('tab', value);
-          
-          if (searchQuery) params.set('q', searchQuery);
-          if (filterStatus !== 'All') params.set('status', filterStatus);
-          if (filterStand) params.set('stand', filterStand);
-          if (filterPVOnly) params.set('pvOnly', 'true');
-          if (currentPage > 1) params.set('page', currentPage.toString());
-
-          const queryString = params.toString();
-          const url = queryString ? `?${queryString}` : '/';
-          router.push(url, { scroll: false });
+          setActiveTab(value as 'all' | 'pv');
+          setCurrentPage(1);
         }}
         className="space-y-6"
       >
@@ -406,13 +423,15 @@ export default function ExhibitorsDashboard() {
             exhibitors={paginatedExhibitors}
             isLoading={isLoading}
             variant="full"
-            isPending={pvStatusMutation.isPending}
+            isPending={pvStatusMutation.isPending || updateStatusMutation.isPending}
             onFlagClick={(exhibitorId, newStatus) => {
               pvStatusMutation.mutate({
                 exhibitorId,
                 isPVInstaller: newStatus,
               });
             }}
+            onEditNotes={handleEditExhibitor}
+            onStatusChange={handleStatusChange}
           />
         </TabsContent>
 
@@ -457,7 +476,7 @@ export default function ExhibitorsDashboard() {
             exhibitors={paginatedPVInstallers}
             isLoading={false}
             variant="pv"
-            isPending={pvStatusMutation.isPending}
+            isPending={pvStatusMutation.isPending || updateStatusMutation.isPending}
             onFlagClick={(exhibitorId, newStatus) => {
               pvStatusMutation.mutate({
                 exhibitorId,
@@ -471,6 +490,7 @@ export default function ExhibitorsDashboard() {
                 isPVInstaller: false,
               });
             }}
+            onStatusChange={handleStatusChange}
           />
         </TabsContent>
       </Tabs>

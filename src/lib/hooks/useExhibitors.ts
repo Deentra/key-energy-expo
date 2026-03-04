@@ -131,3 +131,18 @@ export const useUpdatePVStatus = () => {
     },
   });
 };
+
+export const useRecognizePVInstallers = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await axios.post('/api/recognize-pv-installers');
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exhibitors'] });
+      queryClient.invalidateQueries({ queryKey: ['exhibitor-stats'] });
+    },
+  });
+};

@@ -12,12 +12,20 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
   Flag,
   Plus,
   MessageSquare,
   CheckCircle2,
   ExternalLink,
   Loader,
+  MoreHorizontal,
 } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Exhibitor } from '@/lib/hooks/useExhibitors';
@@ -30,6 +38,7 @@ interface ExhibitorTableProps {
   onFlagClick?: (exhibitorId: string, newStatus: boolean) => void;
   onEditNotes?: (exhibitor: Exhibitor) => void;
   onRemovePV?: (exhibitorId: string) => void;
+  onStatusChange?: (exhibitorId: string, newStatus: 'New' | 'Contacted' | 'Successful Lead' | 'Rejected') => void;
 }
 
 const getStatusBadge = (status: 'New' | 'Contacted' | 'Successful Lead' | 'Rejected') => {
@@ -55,6 +64,7 @@ export function ExhibitorTable({
   onFlagClick,
   onEditNotes,
   onRemovePV,
+  onStatusChange,
 }: ExhibitorTableProps) {
   const isFull = variant === 'full';
   const headerGradient = isFull
@@ -83,7 +93,7 @@ export function ExhibitorTable({
                   <TableHead className={`font-bold ${headerTextColor}`}>Notes</TableHead>
                 </>
               )}
-              <TableHead className={`text-right font-bold ${headerTextColor}`}>Actions</TableHead>
+              <TableHead className={`text-right font-bold ${headerTextColor} sticky right-0 z-20 bg-inherit min-w-[68px]`}>Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -138,10 +148,36 @@ export function ExhibitorTable({
                         </TableCell>
                       </>
                     )}
-                    <TableCell className="text-right py-3">
-                      <div className="flex items-center justify-end gap-1">
+                    <TableCell className="text-right py-3 sticky right-0 z-10 bg-white/95 backdrop-blur-sm shadow-sm min-w-[68px] md:shadow-lg">
+                      <div className="flex items-center justify-end gap-1.5">
                         {isFull ? (
                           <>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-9 w-9" disabled={isPending}>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'Contacted')} disabled={isPending}>
+                                  Contacted
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'Successful Lead')} disabled={isPending}>
+                                  Success
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'Rejected')} disabled={isPending}>
+                                  Reject
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'New')} disabled={isPending}>
+                                  Clear Status
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => onEditNotes?.(ex)} disabled={isPending || !onEditNotes}>
+                                  <MessageSquare className="h-4 w-4" />
+                                  Edit Notes
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             <motion.button
                               whileHover={{ scale: 1.05 }}
                               whileTap={{ scale: 0.95 }}
@@ -173,14 +209,32 @@ export function ExhibitorTable({
                           </>
                         ) : (
                           <>
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              onClick={() => onEditNotes?.(ex)}
-                              className="p-2 rounded-md hover:bg-blue-100 hover:text-blue-600 transition-colors duration-150"
-                            >
-                              <MessageSquare className="h-4 w-4" />
-                            </motion.button>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon" className="h-9 w-9" disabled={isPending}>
+                                  <MoreHorizontal className="h-4 w-4" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end">
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'Contacted')} disabled={isPending}>
+                                  Contacted
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'Successful Lead')} disabled={isPending}>
+                                  Success
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'Rejected')} disabled={isPending}>
+                                  Reject
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => onStatusChange?.(ex.id, 'New')} disabled={isPending}>
+                                  Clear Status
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuItem onClick={() => onEditNotes?.(ex)} disabled={isPending || !onEditNotes}>
+                                  <MessageSquare className="h-4 w-4" />
+                                  Edit Notes
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
                             {ex.website && (
                               <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-blue-600 p-1" asChild>
                                 <a href={`https://www.key-expo.com${ex.website}`} target="_blank" rel="noopener noreferrer">
