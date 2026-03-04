@@ -24,6 +24,21 @@ export interface ExhibitorStats {
   pvInstallers: number;
 }
 
+export interface RecognizePVJobStatus {
+  state: 'idle' | 'running' | 'completed' | 'failed';
+  startedAt: string | null;
+  endedAt: string | null;
+  totalCandidates: number;
+  processed: number;
+  recognized: number;
+  recognizedIds: string[];
+  crawledProfiles: number;
+  metadataMatches: number;
+  profileMatches: number;
+  error: string | null;
+  progress: number;
+}
+
 // Fetch exhibitors
 export const useFetchExhibitors = (
   searchQuery?: string,
@@ -141,8 +156,23 @@ export const useRecognizePVInstallers = () => {
       return response.data;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['exhibitors'] });
-      queryClient.invalidateQueries({ queryKey: ['exhibitor-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['recognize-pv-status'] });
     },
+  });
+};
+
+export const useRecognizePVStatus = () => {
+  return useQuery({
+    queryKey: ['recognize-pv-status'],
+    queryFn: async () => {
+      const response = await axios.get<{ success: boolean; job: RecognizePVJobStatus }>('/api/recognize-pv-installers');
+      return response.data.job;
+    },
+    refetchInterval: (query) => {
+      const status = query.state.data;
+      return status?.state === 'running' ? 2000 : false;
+    },
+    refetchOnWindowFocus: false,
+    staleTime: 0,
   });
 };

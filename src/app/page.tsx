@@ -2,6 +2,7 @@
 
 import { useMemo, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -21,18 +22,14 @@ import {
 } from '@/components/ui/dialog';
 import {
   Search,
-  Flag,
-  Plus,
-  MessageSquare,
   ChevronLeft,
   ChevronRight,
   RefreshCw,
   Loader,
   CheckCircle2,
-  ExternalLink,
   Sparkles,
 } from 'lucide-react';
-import { useFetchExhibitors, useFetchStats, useSyncExhibitors, useUpdatePVStatus, useUpdateExhibitorStatus, useRecognizePVInstallers, Exhibitor } from '@/lib/hooks/useExhibitors';
+import { useFetchExhibitors, useFetchStats, useSyncExhibitors, useUpdatePVStatus, useUpdateExhibitorStatus, useRecognizePVInstallers, useRecognizePVStatus, Exhibitor } from '@/lib/hooks/useExhibitors';
 import { useExhibitorStore } from '@/lib/stores/exhibitorStore';
 import { updateNotesSchema, UpdateNotesForm } from '@/lib/schemas/exhibitor';
 import { ExhibitorTable } from '@/components/ExhibitorTable';
@@ -42,20 +39,21 @@ const ITEMS_PER_PAGE = 10;
 export default function ExhibitorsDashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'all' | 'pv'>('all');
+  const [hasSynced, setHasSynced] = useState(false);
+  const [recognizeCompletedAt, setRecognizeCompletedAt] = useState<string | null>(null);
 
   // Zustand store
   const {
     searchQuery,
     filterStatus,
     filterStand,
-    filterPVOnly,
     currentPage,
     editingExhibitor,
     setSearchQuery,
     setFilterStatus,
     setFilterStand,
-    setFilterPVOnly,
     setCurrentPage,
     setEditingExhibitor,
     clearFilters,
@@ -69,15 +67,18 @@ export default function ExhibitorsDashboard() {
     const status = searchParams.get('status') || 'All';
     const stand = searchParams.get('stand') || '';
     const page = parseInt(searchParams.get('page') || '1');
-    const pvOnly = searchParams.get('pvOnly') === 'true';
 
     setActiveTab(tab);
     if (q && q !== searchQuery) setSearchQuery(q);
     if (status !== 'All' && status !== filterStatus) setFilterStatus(status);
     if (stand && stand !== filterStand) setFilterStand(stand);
-    if (pvOnly !== filterPVOnly) setFilterPVOnly(pvOnly);
     if (page > 1 && page !== currentPage) setCurrentPage(page);
   }, []); // Run only on mount
+
+  useEffect(() => {
+    const synced = typeof window !== 'undefined' && localStorage.getItem('exhibitorsSynced') === 'true';
+    if (synced) setHasSynced(true);
+  }, []);
 
   // Update URL when state changes
   useEffect(() => {
@@ -87,7 +88,6 @@ export default function ExhibitorsDashboard() {
     if (searchQuery) params.set('q', searchQuery);
     if (filterStatus !== 'All') params.set('status', filterStatus);
     if (filterStand) params.set('stand', filterStand);
-    if (filterPVOnly) params.set('pvOnly', 'true');
     if (currentPage > 1) params.set('page', currentPage.toString());
 
     const nextQuery = params.toString();
@@ -96,14 +96,14 @@ export default function ExhibitorsDashboard() {
       const url = nextQuery ? `?${nextQuery}` : '/';
       router.replace(url, { scroll: false });
     }
-  }, [activeTab, searchQuery, filterStatus, filterStand, filterPVOnly, currentPage, router, searchParams]);
+  }, [activeTab, searchQuery, filterStatus, filterStand, currentPage, router, searchParams]);
 
   // React Query hooks
   const { data: exhibitors = [] as Exhibitor[], isLoading } = useFetchExhibitors(
     searchQuery,
     filterStatus,
     filterStand,
-    filterPVOnly
+    false
   );
 
   const { data: stats, isLoading: statsLoading } = useFetchStats();
@@ -111,6 +111,33 @@ export default function ExhibitorsDashboard() {
   const pvStatusMutation = useUpdatePVStatus();
   const updateStatusMutation = useUpdateExhibitorStatus();
   const recognizePVMutation = useRecognizePVInstallers();
+  const { data: recognizePVStatus } = useRecognizePVStatus();
+
+  useEffect(() => {
+    if (syncMutation.isSuccess) {
+      setHasSynced(true);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('exhibitorsSynced', 'true');
+      }
+    }
+  }, [syncMutation.isSuccess]);
+
+  useEffect(() => {
+    if (recognizePVStatus?.state === 'completed' && recognizePVStatus.endedAt && recognizePVStatus.endedAt !== recognizeCompletedAt) {
+      setRecognizeCompletedAt(recognizePVStatus.endedAt);
+      queryClient.invalidateQueries({ queryKey: ['exhibitors'] });
+      queryClient.invalidateQueries({ queryKey: ['exhibitor-stats'] });
+      console.log(`[PV Recognizer] completed: recognized ${recognizePVStatus.recognized} out of ${recognizePVStatus.totalCandidates}`);
+    }
+
+    if (recognizePVStatus?.state === 'running') {
+      console.log(`[PV Recognizer] progress ${recognizePVStatus.processed}/${recognizePVStatus.totalCandidates} (${recognizePVStatus.progress}%)`);
+    }
+
+    if (recognizePVStatus?.state === 'failed' && recognizePVStatus.error) {
+      console.error('[PV Recognizer] failed:', recognizePVStatus.error);
+    }
+  }, [recognizePVStatus, recognizeCompletedAt, queryClient]);
 
   // Handle clear filters - also updates URL
   const handleClearFilters = () => {
@@ -256,31 +283,52 @@ export default function ExhibitorsDashboard() {
           )}
           <Button
             onClick={() => syncMutation.mutate()}
-            disabled={syncMutation.isPending || syncMutation.isSuccess}
+            disabled={syncMutation.isPending || hasSynced}
             className="gap-2 bg-blue-600 hover:bg-blue-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {syncMutation.isPending ? (
               <Loader className="h-4 w-4 animate-spin" />
-            ) : syncMutation.isSuccess ? (
+            ) : hasSynced ? (
               <CheckCircle2 className="h-4 w-4" />
             ) : (
               <RefreshCw className="h-4 w-4" />
             )}
-            {syncMutation.isPending ? 'Syncing...' : syncMutation.isSuccess ? 'Synced!' : 'Sync All Exhibitors'}
+            {syncMutation.isPending ? 'Syncing...' : hasSynced ? 'Synced!' : 'Sync All Exhibitors'}
           </Button>
-          <Button
-            onClick={() => recognizePVMutation.mutate()}
-            disabled={recognizePVMutation.isPending}
-            className="gap-2 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-            title="Analyze company names to identify potential PV installers using keyword matching"
-          >
-            {recognizePVMutation.isPending ? (
-              <Loader className="h-4 w-4 animate-spin" />
-            ) : (
-              <Sparkles className="h-4 w-4" />
+          <div className="flex flex-col gap-1 w-full sm:w-auto">
+            <Button
+              onClick={() => recognizePVMutation.mutate()}
+              disabled={recognizePVMutation.isPending || recognizePVStatus?.state === 'running'}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Analyze company names to identify potential PV installers using keyword matching"
+            >
+              {recognizePVMutation.isPending || recognizePVStatus?.state === 'running' ? (
+                <Loader className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {recognizePVStatus?.state === 'running'
+                ? `Analyzing ${recognizePVStatus.processed}/${recognizePVStatus.totalCandidates || 0}`
+                : recognizePVStatus?.state === 'completed'
+                  ? `Found ${recognizePVStatus.recognized}`
+                  : 'Recognize PV Installers'}
+            </Button>
+            {recognizePVStatus?.state === 'running' && (
+              <p className="text-xs text-emerald-700">
+                Background scan running · {recognizePVStatus.progress}% complete
+              </p>
             )}
-            {recognizePVMutation.isPending ? 'Analyzing...' : recognizePVMutation.data?.recognized ? `Found ${recognizePVMutation.data?.recognized}` : 'Recognize PV Installers'}
-          </Button>
+            {recognizePVStatus?.state === 'completed' && (
+              <p className="text-xs text-emerald-700">
+                Background scan finished · {recognizePVStatus.recognized} matches
+              </p>
+            )}
+            {recognizePVStatus?.state === 'failed' && (
+              <p className="text-xs text-red-600">
+                Background scan failed. Check console logs.
+              </p>
+            )}
+          </div>
         </div>
       </motion.div>
 
@@ -326,11 +374,11 @@ export default function ExhibitorsDashboard() {
         }}
         className="space-y-6"
       >
-        <TabsList className="bg-muted/50 p-1">
-          <TabsTrigger value="all" className="px-6">
+        <TabsList className="bg-muted/50 p-1 h-12">
+          <TabsTrigger value="all" className="px-6 h-full">
             Full Catalogue
           </TabsTrigger>
-          <TabsTrigger value="pv" className="px-6">
+          <TabsTrigger value="pv" className="px-6 h-full">
             My PV Leads
             {(pvInstallers?.length || 0) > 0 && (
               <span className="ml-2 bg-green-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold">
@@ -365,15 +413,7 @@ export default function ExhibitorsDashboard() {
                     onChange={(e) => setFilterStand(e.target.value)}
                   />
                 </div>
-                <Button
-                  variant={filterPVOnly ? 'default' : 'outline'}
-                  className={filterPVOnly ? 'bg-green-600 hover:bg-green-700' : ''}
-                  onClick={() => setFilterPVOnly(!filterPVOnly)}
-                >
-                  <Flag className="h-4 w-4 mr-2" />
-                  PV Only {filterPVOnly && `(${pvInstallers?.length || 0})`}
-                </Button>
-                {(searchQuery || filterStatus !== 'All' || filterStand || filterPVOnly) && (
+                {(searchQuery || filterStatus !== 'All' || filterStand) && (
                   <Button variant="outline" onClick={handleClearFilters}>
                     Clear
                   </Button>

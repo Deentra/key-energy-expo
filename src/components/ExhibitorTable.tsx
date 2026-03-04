@@ -16,11 +16,13 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import {
   Flag,
-  Plus,
   MessageSquare,
   CheckCircle2,
   ExternalLink,
@@ -178,27 +180,27 @@ export function ExhibitorTable({
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
+                            <Button
+                              type="button"
+                              size="sm"
                               disabled={isPending}
                               onClick={() => onFlagClick?.(ex.id, !ex.isPVInstaller)}
-                              className={`px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-150 flex items-center gap-1 disabled:opacity-50 disabled:cursor-not-allowed ${
+                              className={`h-9 px-4 text-sm font-medium transition-colors ${
                                 ex.isPVInstaller
-                                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                                  : 'bg-slate-100 text-slate-600 hover:bg-green-100 hover:text-green-700'
+                                  ? 'bg-green-600 text-white hover:bg-green-700'
+                                  : 'bg-slate-700 text-white hover:bg-green-700'
                               }`}
                             >
                               {ex.isPVInstaller ? (
                                 <>
-                                  <CheckCircle2 className="h-3.5 w-3.5" /> Lead
+                                  <CheckCircle2 className="h-4 w-4 mr-1" /> Lead
                                 </>
                               ) : (
                                 <>
-                                  <Flag className="h-3.5 w-3.5" />
+                                  <Flag className="h-4 w-4 mr-1" /> PV
                                 </>
                               )}
-                            </motion.button>
+                            </Button>
                             {ex.website && (
                               <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-blue-600" asChild>
                                 <a href={`https://www.key-expo.com${ex.website}`} target="_blank" rel="noopener noreferrer">
@@ -233,6 +235,21 @@ export function ExhibitorTable({
                                   <MessageSquare className="h-4 w-4" />
                                   Edit Notes
                                 </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                                <DropdownMenuSub>
+                                  <DropdownMenuSubTrigger className="text-red-600 focus:text-red-700">
+                                    Remove from PV
+                                  </DropdownMenuSubTrigger>
+                                  <DropdownMenuSubContent>
+                                    <DropdownMenuItem
+                                      onClick={() => onRemovePV?.(ex.id)}
+                                      disabled={isPending}
+                                      className="text-red-600 focus:text-red-700"
+                                    >
+                                      Confirm Remove
+                                    </DropdownMenuItem>
+                                  </DropdownMenuSubContent>
+                                </DropdownMenuSub>
                               </DropdownMenuContent>
                             </DropdownMenu>
                             {ex.website && (
@@ -242,15 +259,6 @@ export function ExhibitorTable({
                                 </a>
                               </Button>
                             )}
-                            <motion.button
-                              whileHover={{ scale: 1.05 }}
-                              whileTap={{ scale: 0.95 }}
-                              disabled={isPending}
-                              onClick={() => onRemovePV?.(ex.id)}
-                              className="p-2 rounded-md hover:bg-red-100 hover:text-red-600 transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <Plus className="h-4 w-4 rotate-45" />
-                            </motion.button>
                           </>
                         )}
                       </div>

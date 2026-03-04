@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
     if (query) {
       exhibitors = await searchExhibitors(query, {
         status: status || undefined,
-        isPVInstaller: isPVInstaller === 'true',
+        isPVInstaller: isPVInstaller === 'true' ? true : undefined,
         stand: stand || undefined,
       });
     } else {
