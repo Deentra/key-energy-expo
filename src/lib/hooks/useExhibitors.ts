@@ -25,7 +25,7 @@ export interface ExhibitorStats {
 }
 
 export interface RecognizePVJobStatus {
-  state: 'idle' | 'running' | 'completed' | 'failed';
+  state: 'idle' | 'running' | 'completed' | 'failed' | 'paused';
   startedAt: string | null;
   endedAt: string | null;
   totalCandidates: number;
@@ -174,5 +174,49 @@ export const useRecognizePVStatus = () => {
     },
     refetchOnWindowFocus: false,
     staleTime: 0,
+  });
+};
+
+export const usePauseRecognizer = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await axios.post('/api/recognize-pv-installers', { action: 'pause' });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recognize-pv-status'] });
+    },
+  });
+};
+
+export const useResumeRecognizer = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await axios.post('/api/recognize-pv-installers', { action: 'resume' });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recognize-pv-status'] });
+    },
+  });
+};
+
+export const useStopRecognizer = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const response = await axios.post('/api/recognize-pv-installers', { action: 'stop' });
+      return response.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recognize-pv-status'] });
+      queryClient.invalidateQueries({ queryKey: ['exhibitors'] });
+      queryClient.invalidateQueries({ queryKey: ['exhibitor-stats'] });
+    },
   });
 };

@@ -68,10 +68,10 @@ const PROFILE_NON_INSTALLER_KEYWORDS = [
 const PROFILE_BASE_URL = 'https://www.key-expo.com';
 const FETCH_TIMEOUT_MS = 8000;
 const MAX_PROFILE_TEXT_LENGTH = 12000;
-const BATCH_SIZE = 10;
-const BATCH_DELAY_MS = 1200;
+const BATCH_SIZE = 15;
+const BATCH_DELAY_MS = 10000;
 
-type JobState = 'idle' | 'running' | 'completed' | 'failed';
+type JobState = 'idle' | 'running' | 'completed' | 'failed' | 'paused';
 
 interface RecognizerJob {
   state: JobState;
@@ -85,6 +85,7 @@ interface RecognizerJob {
   metadataMatches: number;
   profileMatches: number;
   error: string | null;
+  isPaused: boolean;
 }
 
 const recognizerJob: RecognizerJob = {
@@ -99,6 +100,7 @@ const recognizerJob: RecognizerJob = {
   metadataMatches: 0,
   profileMatches: 0,
   error: null,
+  isPaused: false,
 };
 
 function getJobSnapshot() {
@@ -243,6 +245,16 @@ async function runRecognizerInBackground() {
     console.log(`[PV Recognizer] started background scan. candidates=${candidates.length}, batchSize=${BATCH_SIZE}`);
 
     for (let index = 0; index < candidates.length; index += BATCH_SIZE) {
+      // Check if paused and wait
+      while (recognizerJob.isPaused) {
+        await delay(500);
+      }
+
+      // Check if state changed to failed/completed (user stopped it)
+      if (recognizerJob.state !== 'running' && recognizerJob.state !== 'paused') {
+        break;
+      }
+
       const batch = candidates.slice(index, index + BATCH_SIZE);
       const batchIndex = Math.floor(index / BATCH_SIZE) + 1;
       const totalBatches = Math.ceil(candidates.length / BATCH_SIZE);
@@ -277,6 +289,7 @@ async function runRecognizerInBackground() {
       console.log(`[PV Recognizer] progress ${recognizerJob.processed}/${recognizerJob.totalCandidates}, recognized=${recognizerJob.recognized}`);
 
       if (index + BATCH_SIZE < candidates.length) {
+        console.log(`[PV Recognizer] waiting 10 seconds before next batch...`);
         await delay(BATCH_DELAY_MS);
       }
     }
@@ -299,9 +312,45 @@ export async function GET() {
   });
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
-    if (recognizerJob.state === 'running') {
+    const body = await request.json().catch(() => ({}));
+    const action = body.action as string | undefined;
+
+    if (action === 'pause') {
+      if (recognizerJob.state !== 'running') {
+        return Response.json(
+          { success: false, message: 'Recognizer is not running' },
+          { status: 400 }
+        );
+      }
+      recognizerJob.isPaused = true;
+      recognizerJob.state = 'paused';
+      console.log('[PV Recognizer] paused by user');
+      return Response.json({ success: true, job: getJobSnapshot() });
+    }
+
+    if (action === 'resume') {
+      if (recognizerJob.state !== 'paused') {
+        return Response.json(
+          { success: false, message: 'Recognizer is not paused' },
+          { status: 400 }
+        );
+      }
+      recognizerJob.isPaused = false;
+      recognizerJob.state = 'running';
+      console.log('[PV Recognizer] resumed by user');
+      return Response.json({ success: true, job: getJobSnapshot() });
+    }
+
+    if (action === 'stop') {
+      recognizerJob.state = 'completed';
+      recognizerJob.endedAt = new Date().toISOString();
+      console.log('[PV Recognizer] stopped by user at ${recognizerJob.processed}/${recognizerJob.totalCandidates}');
+      return Response.json({ success: true, job: getJobSnapshot() });
+    }
+
+    if (recognizerJob.state === 'running' || recognizerJob.state === 'paused') {
       return Response.json({
         success: true,
         message: 'Recognizer is already running in background',
@@ -321,6 +370,7 @@ export async function POST() {
     }
 
     recognizerJob.state = 'running';
+    recognizerJob.isPaused = false;
     recognizerJob.startedAt = new Date().toISOString();
     recognizerJob.endedAt = null;
     recognizerJob.totalCandidates = 0;

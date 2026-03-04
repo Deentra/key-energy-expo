@@ -28,8 +28,11 @@ import {
   Loader,
   CheckCircle2,
   Sparkles,
+  Pause,
+  Play,
+  X,
 } from 'lucide-react';
-import { useFetchExhibitors, useFetchStats, useSyncExhibitors, useUpdatePVStatus, useUpdateExhibitorStatus, useRecognizePVInstallers, useRecognizePVStatus, Exhibitor } from '@/lib/hooks/useExhibitors';
+import { useFetchExhibitors, useFetchStats, useSyncExhibitors, useUpdatePVStatus, useUpdateExhibitorStatus, useRecognizePVInstallers, useRecognizePVStatus, usePauseRecognizer, useResumeRecognizer, useStopRecognizer, Exhibitor } from '@/lib/hooks/useExhibitors';
 import { useExhibitorStore } from '@/lib/stores/exhibitorStore';
 import { updateNotesSchema, UpdateNotesForm } from '@/lib/schemas/exhibitor';
 import { ExhibitorTable } from '@/components/ExhibitorTable';
@@ -111,6 +114,9 @@ export default function ExhibitorsDashboard() {
   const pvStatusMutation = useUpdatePVStatus();
   const updateStatusMutation = useUpdateExhibitorStatus();
   const recognizePVMutation = useRecognizePVInstallers();
+  const pauseRecognizerMutation = usePauseRecognizer();
+  const resumeRecognizerMutation = useResumeRecognizer();
+  const stopRecognizerMutation = useStopRecognizer();
   const { data: recognizePVStatus } = useRecognizePVStatus();
 
   useEffect(() => {
@@ -296,26 +302,75 @@ export default function ExhibitorsDashboard() {
             {syncMutation.isPending ? 'Syncing...' : hasSynced ? 'Synced!' : 'Sync All Exhibitors'}
           </Button>
           <div className="flex flex-col gap-1 w-full sm:w-auto">
-            <Button
-              onClick={() => recognizePVMutation.mutate()}
-              disabled={recognizePVMutation.isPending || recognizePVStatus?.state === 'running'}
-              className="gap-2 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Analyze company names to identify potential PV installers using keyword matching"
-            >
-              {recognizePVMutation.isPending || recognizePVStatus?.state === 'running' ? (
-                <Loader className="h-4 w-4 animate-spin" />
-              ) : (
-                <Sparkles className="h-4 w-4" />
+            <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
+              <Button
+                onClick={() => recognizePVMutation.mutate()}
+                disabled={recognizePVMutation.isPending || recognizePVStatus?.state === 'running' || recognizePVStatus?.state === 'paused'}
+                className="gap-2 bg-emerald-600 hover:bg-emerald-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Analyze company names to identify potential PV installers using keyword matching"
+              >
+                {recognizePVMutation.isPending || recognizePVStatus?.state === 'running' ? (
+                  <Loader className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {recognizePVStatus?.state === 'running'
+                  ? `Analyzing ${recognizePVStatus.processed}/${recognizePVStatus.totalCandidates || 0}`
+                  : recognizePVStatus?.state === 'completed'
+                    ? `Found ${recognizePVStatus.recognized}`
+                    : recognizePVStatus?.state === 'paused'
+                      ? `Paused at ${recognizePVStatus.processed}/${recognizePVStatus.totalCandidates || 0}`
+                      : 'Recognize PV Installers'}
+              </Button>
+              
+              {(recognizePVStatus?.state === 'running' || recognizePVStatus?.state === 'paused') && (
+                <>
+                  {recognizePVStatus.state === 'running' && (
+                    <Button
+                      onClick={() => pauseRecognizerMutation.mutate()}
+                      disabled={pauseRecognizerMutation.isPending}
+                      className="gap-2 bg-amber-600 hover:bg-amber-700 w-full sm:w-auto"
+                      title="Pause the recognizer"
+                    >
+                      <Pause className="h-4 w-4" />
+                      Stop
+                    </Button>
+                  )}
+                  
+                  {recognizePVStatus.state === 'paused' && (
+                    <>
+                      <Button
+                        onClick={() => resumeRecognizerMutation.mutate()}
+                        disabled={resumeRecognizerMutation.isPending}
+                        className="gap-2 bg-blue-600 hover:bg-blue-700 w-full sm:w-auto"
+                        title="Resume the recognizer"
+                      >
+                        <Play className="h-4 w-4" />
+                        Continue
+                      </Button>
+                      <Button
+                        onClick={() => stopRecognizerMutation.mutate()}
+                        disabled={stopRecognizerMutation.isPending}
+                        className="gap-2 bg-red-600 hover:bg-red-700 w-full sm:w-auto"
+                        title="Stop the recognizer permanently"
+                      >
+                        <X className="h-4 w-4" />
+                        Cancel
+                      </Button>
+                    </>
+                  )}
+                </>
               )}
-              {recognizePVStatus?.state === 'running'
-                ? `Analyzing ${recognizePVStatus.processed}/${recognizePVStatus.totalCandidates || 0}`
-                : recognizePVStatus?.state === 'completed'
-                  ? `Found ${recognizePVStatus.recognized}`
-                  : 'Recognize PV Installers'}
-            </Button>
+            </div>
+            
             {recognizePVStatus?.state === 'running' && (
               <p className="text-xs text-emerald-700">
                 Background scan running · {recognizePVStatus.progress}% complete
+              </p>
+            )}
+            {recognizePVStatus?.state === 'paused' && (
+              <p className="text-xs text-amber-700">
+                Background scan paused · {recognizePVStatus.progress}% complete
               </p>
             )}
             {recognizePVStatus?.state === 'completed' && (
