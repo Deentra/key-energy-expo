@@ -93,6 +93,22 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(stats);
     }
 
+    // Check if exhibitors already exist in database
+    const currentStats = await getExhibitorStats();
+    if (currentStats.total > 0) {
+      console.log(`⚠️  Database already contains ${currentStats.total} exhibitors. Sync not allowed to prevent data loss.`);
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Exhibitors already synced',
+          message: `Database already contains ${currentStats.total} exhibitors. Syncing again would reset all PV installer flags and notes.`,
+          details: `Current data: ${currentStats.new} New, ${currentStats.contacted} Contacted, ${currentStats.successfulLeads} Successful, ${currentStats.rejected} Rejected, ${currentStats.pvInstallers} PV Installers`,
+          existingData: currentStats,
+        },
+        { status: 409 } // 409 Conflict
+      );
+    }
+
     // Start fresh
     await clearAllExhibitors();
     let allExhibitors: any[] = [];

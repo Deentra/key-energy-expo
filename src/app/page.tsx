@@ -31,6 +31,7 @@ import {
   Pause,
   Play,
   X,
+  Download,
 } from 'lucide-react';
 import { useFetchExhibitors, useFetchStats, useSyncExhibitors, useUpdatePVStatus, useUpdateExhibitorStatus, useRecognizePVInstallers, useRecognizePVStatus, usePauseRecognizer, useResumeRecognizer, useStopRecognizer, Exhibitor } from '@/lib/hooks/useExhibitors';
 import { useExhibitorStore } from '@/lib/stores/exhibitorStore';
@@ -282,15 +283,17 @@ export default function ExhibitorsDashboard() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="text-sm px-3 py-1 rounded-md bg-red-100 text-red-800"
+              className="text-sm px-3 py-1.5 rounded-md bg-amber-100 text-amber-800 max-w-xs"
             >
-              ✗ Sync failed
+              <p className="font-semibold">⚠️ Data already exists!</p>
+              <p className="text-xs mt-1">Sync is disabled to protect your PV leads and notes. Your data is safe!</p>
             </motion.div>
           )}
-          {/* <Button
+          <Button
             onClick={() => syncMutation.mutate()}
             disabled={syncMutation.isPending || hasSynced}
             className="gap-2 bg-blue-600 hover:bg-blue-700 w-full sm:w-auto disabled:opacity-50 disabled:cursor-not-allowed"
+            title={hasSynced ? "Exhibitors already synced. Sync disabled to protect PV leads." : "Fetch and sync all exhibitors from Key Energy"}
           >
             {syncMutation.isPending ? (
               <Loader className="h-4 w-4 animate-spin" />
@@ -300,7 +303,7 @@ export default function ExhibitorsDashboard() {
               <RefreshCw className="h-4 w-4" />
             )}
             {syncMutation.isPending ? 'Syncing...' : hasSynced ? 'Synced!' : 'Sync All Exhibitors'}
-          </Button> */}
+          </Button>
           <div className="flex flex-col gap-1 w-full sm:w-auto">
             <div className="flex flex-col sm:flex-row gap-2 w-full sm:w-auto">
               <Button
@@ -385,6 +388,42 @@ export default function ExhibitorsDashboard() {
             )}
           </div>
         </div>
+      </motion.div>
+
+      {/* Export & Backup Section */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.15, delay: 0.1 }}
+        className="flex flex-col sm:flex-row gap-2 mb-8"
+      >
+        <Button
+          onClick={() => window.location.href = '/api/backup/database'}
+          variant="outline"
+          className="gap-2 text-xs sm:text-sm"
+          title="Download complete database backup as JSON"
+        >
+          <Download className="h-4 w-4" />
+          Backup Database
+        </Button>
+        <Button
+          onClick={() => window.location.href = '/api/export/pv-leads'}
+          variant="outline"
+          className="gap-2 text-xs sm:text-sm"
+          title="Export all PV installer leads as CSV"
+        >
+          <Download className="h-4 w-4" />
+          Export PV Leads
+        </Button>
+        <Button
+          onClick={() => window.location.href = '/api/export/qualified-leads'}
+          variant="outline"
+          className="gap-2 text-xs sm:text-sm"
+          title="Export leads with status, notes, or PV flag as CSV"
+        >
+          <Download className="h-4 w-4" />
+          Export Qualified
+        </Button>
       </motion.div>
 
       {/* Stats Cards */}
